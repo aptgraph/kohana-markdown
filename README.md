@@ -18,7 +18,7 @@ as headers, *emphasis*, code blocks, blockquotes, and links.
 Markdown's syntax is designed not as a generic markup language, but
 specifically to serve as a front-end to (X)HTML. You can use span-level
 HTML tags anywhere in a Markdown document, and you can use block level
-HTML tags (like <div> and <table> as well).
+HTML tags (like `<div>` and `<table>` as well).
 
 For more information about Markdown's syntax, see:
 <http://daringfireball.net/projects/markdown/>
@@ -31,12 +31,12 @@ For more information about Markdown's syntax, see:
 	a github key configured. Please check the github documentation for more
 	details.
 
-		git clone git@github.com:stroppytux/kohana-markdown.git markdown
+		git clone git@github.com:stroppytux/kohana-markdown.git modules/markdown
 
 
-	This should give you the following (in the markdown directory):
+	This should give you the following *(in the modules/markdown directory)*:
 
-		README.md  classes  config
+		classes  config  README.md
 
 2. ### Configure Markdown ###
 
@@ -48,7 +48,8 @@ For more information about Markdown's syntax, see:
 3. ### Enable Markdown ###
 
 	In order to enable the markdown module, edit the application/bootstrap.php
-	file and add and enable the markdown module.
+	file and add and enable the markdown module within the `Kohana::modules`
+	section of the bootstrap file.
 
 		'markdown'		=> MODPATH.'markdown',		// Markdown module
 
