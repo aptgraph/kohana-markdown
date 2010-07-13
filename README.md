@@ -45,6 +45,13 @@ For more information about Markdown's syntax, see:
 
 		cp modules/markdown/config/markdown.php application/config/
 
+	* ####type####
+		Defines the type of output to produce. This can be one of *html* or *xhtml*.
+
+	* ####tab_width####
+		When producing the output, indentation is applied. The **tab_width**
+		value sets the tab width to use for the indentation.
+
 3. ### Enable Markdown ###
 
 	In order to enable the markdown module, edit the application/bootstrap.php
@@ -82,5 +89,11 @@ For more information about Markdown's syntax, see:
 
 5. ### Validation rules ###
 
-	TODO: Need to create a regex validation rule for markdown.
+	A helper paramater has been added to the Kohana_markdown class that can be
+	used in conjunction with the Kohana_Validation class. In order to use this,
+	add the following to the validation rules:
+
+		/* Validate the input */
+		$validation = Validate::factory(array('description' => $description)
+		->rule('description', 'regex', array(Markdown::$validate));
 

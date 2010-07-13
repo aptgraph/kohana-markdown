@@ -38,6 +38,9 @@ class Kohana_Markdown
 	public static $default = 'default';
 	protected $_config;
 
+	/* Regex to use in the Validation class */
+	public static $validate = '/[[:punct:][:space:]]{0,}/';
+
 	/* Regex to match balanced [brackets] used to insert max bracked depth */
 	protected $nested_url_parenthesis_depth = 4;
 	protected $nested_url_parenthesis_re;
@@ -67,6 +70,7 @@ class Kohana_Markdown
 
 	/* Status flag to avoid invalid nesting. */
 	protected $in_anchor = false;
+	protected $list_level = 0;
 
 	/* Strip link definitions, store in hashes. */
 	protected $document_gamut = array(
@@ -76,9 +80,9 @@ class Kohana_Markdown
 
 	/* Transformations to form block-level tags. eg. p, h1,h2,h3, ol,ul. */
 	protected $block_gamut = array(
-		"doHeaders"				=> 10,
-		"doHorizontalRules"		=> 20,
-		"doLists"				=> 40,
+		"do_headers"			=> 10,
+		"do_horizontal_rules"	=> 20,
+		"do_lists"				=> 40,
 		"doCodeBlocks"			=> 50,
 		"doBlockQuotes"			=> 60,
 		);
@@ -91,18 +95,18 @@ class Kohana_Markdown
 		/* Process anchor and image tags. Images must come first, because
 		 * ![foo][f] looks like an anchor.
 		 */
-		"doImages"				=> 10,
-		"doAnchors"				=> 20,
+		"do_images"				=> 10,
+		"do_anchors"			=> 20,
 
 		/* Make links out of things like `<http://example.com/>`. Must come
-		 * after doAnchors, because you can use < and > delimiters in inline
+		 * after do_anchors, because you can use < and > delimiters in inline
 		 * links like [this](<url>).
 		 */
 		"doAutoLinks"			=> 30,
 		"encodeAmpsAndAngles"	=> 40,
 
 		"doItalicsAndBold"		=> 50,
-		"doHardBreaks"			=> 60,
+		"do_hard_breaks"		=> 60,
 		);
 
 	protected $em_relist = array(
@@ -561,9 +565,14 @@ class Kohana_Markdown
 		return $text;
 	}
 
-	protected function doHorizontalRules($text)
+	/**
+	 * Add horizontal rules to the output.
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	protected function do_horizontal_rules($text)
 	{
-		# Do Horizontal Rules:
 		return preg_replace(
 			'{
 				^[ ]{0,3}	# Leading space
@@ -579,11 +588,14 @@ class Kohana_Markdown
 			$text);
 	}
 
-	protected function runSpanGamut($text)
+	/**
+	 * Run span gamut tranformations.
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	protected function run_span_gamut($text)
 	{
-	#
-	# Run span gamut tranformations.
-	#
 		foreach ($this->span_gamut as $method => $priority) {
 			$text = $this->$method($text);
 		}
@@ -591,28 +603,35 @@ class Kohana_Markdown
 		return $text;
 	}
 
-	protected function doHardBreaks($text)
+	/**
+	 * Do hard breaks:
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	protected function do_hard_breaks($text)
 	{
-		# Do hard breaks:
 		return preg_replace_callback('/ {2,}\n/', 
-			array(&$this, '_doHardBreaks_callback'), $text);
+			array(&$this, '_do_hard_breaks_callback'), $text);
 	}
-	protected function _doHardBreaks_callback($matches)
+
+	protected function _do_hard_breaks_callback($matches)
 	{
 		return $this->hash_part("<br$this->suffix\n");
 	}
 
-	function doAnchors($text)
+	/**
+	 * Turn Markdown link shortcuts into (x)html <a> tags.
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	function do_anchors($text)
 	{
-	#
-	# Turn Markdown link shortcuts into XHTML <a> tags.
-	#
 		if ($this->in_anchor) return $text;
 		$this->in_anchor = true;
-		
-		#
-		# First, handle reference-style links: [link text] [id]
-		#
+
+		/* First, handle reference-style links: [link text] [id] */
 		$text = preg_replace_callback('{
 			(					# wrap whole match in $1
 			  \[
@@ -627,11 +646,9 @@ class Kohana_Markdown
 			  \]
 			)
 			}xs',
-			array(&$this, '_doAnchors_reference_callback'), $text);
+			array(&$this, '_do_anchors_reference_callback'), $text);
 
-		#
-		# Next, inline-style links: [link text](url "optional title")
-		#
+		/* Next, inline-style links: [link text](url "optional title") */
 		$text = preg_replace_callback('{
 			(				# wrap whole match in $1
 			  \[
@@ -654,13 +671,11 @@ class Kohana_Markdown
 			  \)
 			)
 			}xs',
-			array(&$this, '_doAnchors_inline_callback'), $text);
+			array(&$this, '_do_anchors_inline_callback'), $text);
 
-		#
-		# Last, handle reference-style shortcuts: [link text]
-		# These must come last in case you've also got [link text][1]
-		# or [link text](/foo)
-		#
+		/* Last, handle reference-style shortcuts: [link text]. These must come
+		 * last in case you've also got [link text][1] or [link text](/foo).
+		 */
 		$text = preg_replace_callback('{
 			(					# wrap whole match in $1
 			  \[
@@ -668,52 +683,51 @@ class Kohana_Markdown
 			  \]
 			)
 			}xs',
-			array(&$this, '_doAnchors_reference_callback'), $text);
+			array(&$this, '_do_anchors_reference_callback'), $text);
 
 		$this->in_anchor = false;
 		return $text;
 	}
 
-	protected function _doAnchors_reference_callback($matches)
+	protected function _do_anchors_reference_callback($matches)
 	{
 		$whole_match =  $matches[1];
 		$link_text   =  $matches[2];
 		$link_id     =& $matches[3];
 
+		/* for shortcut links like [this][] or [this]. */
 		if ($link_id == "") {
-			# for shortcut links like [this][] or [this].
 			$link_id = $link_text;
 		}
-		
-		# lower-case and turn embedded newlines into spaces
+
+		/* lower-case and turn embedded newlines into spaces */
 		$link_id = strtolower($link_id);
 		$link_id = preg_replace('{[ ]?\n}', ' ', $link_id);
 
 		if (isset($this->urls[$link_id])) {
 			$url = $this->urls[$link_id];
 			$url = $this->encodeAttribute($url);
-			
+
 			$result = "<a href=\"$url\"";
 			if ( isset( $this->titles[$link_id] ) ) {
 				$title = $this->titles[$link_id];
 				$title = $this->encodeAttribute($title);
 				$result .=  " title=\"$title\"";
 			}
-		
-			$link_text = $this->runSpanGamut($link_text);
+
+			$link_text = $this->run_span_gamut($link_text);
 			$result .= ">$link_text</a>";
 			$result = $this->hash_part($result);
-		}
-		else {
+		} else {
 			$result = $whole_match;
 		}
 		return $result;
 	}
 
-	protected function _doAnchors_inline_callback($matches)
+	protected function _do_anchors_inline_callback($matches)
 	{
 		$whole_match	=  $matches[1];
-		$link_text		=  $this->runSpanGamut($matches[2]);
+		$link_text		=  $this->run_span_gamut($matches[2]);
 		$url			=  $matches[3] == '' ? $matches[4] : $matches[3];
 		$title			=& $matches[7];
 
@@ -724,21 +738,22 @@ class Kohana_Markdown
 			$title = $this->encodeAttribute($title);
 			$result .=  " title=\"$title\"";
 		}
-		
-		$link_text = $this->runSpanGamut($link_text);
+
+		$link_text = $this->run_span_gamut($link_text);
 		$result .= ">$link_text</a>";
 
 		return $this->hash_part($result);
 	}
 
-	protected function doImages($text)
+	/**
+	 * Turn Markdown image shortcuts into <img> tags.
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	protected function do_images($text)
 	{
-	#
-	# Turn Markdown image shortcuts into <img> tags.
-	#
-		#
-		# First, handle reference-style labeled images: ![alt text][id]
-		#
+		/* First, handle reference-style labeled images: ![alt text][id] */
 		$text = preg_replace_callback('{
 			(				# wrap whole match in $1
 			  !\[
@@ -754,12 +769,9 @@ class Kohana_Markdown
 
 			)
 			}xs', 
-			array(&$this, '_doImages_reference_callback'), $text);
+			array(&$this, '_do_images_reference_callback'), $text);
 
-		#
-		# Next, handle inline images:  ![alt text](url "optional title")
-		# Don't forget: encode * and _
-		#
+		/* Next, handle inline images: ![alt text](url "optional title"). */
 		$text = preg_replace_callback('{
 			(				# wrap whole match in $1
 			  !\[
@@ -783,19 +795,20 @@ class Kohana_Markdown
 			  \)
 			)
 			}xs',
-			array(&$this, '_doImages_inline_callback'), $text);
+			array(&$this, '_do_images_inline_callback'), $text);
 
 		return $text;
 	}
 
-	protected function _doImages_reference_callback($matches)
+	protected function _do_images_reference_callback($matches)
 	{
 		$whole_match = $matches[1];
 		$alt_text    = $matches[2];
 		$link_id     = strtolower($matches[3]);
 
+		/* for shortcut links like ![this][]. */
 		if ($link_id == "") {
-			$link_id = strtolower($alt_text); # for shortcut links like ![this][].
+			$link_id = strtolower($alt_text);
 		}
 
 		$alt_text = $this->encodeAttribute($alt_text);
@@ -809,16 +822,16 @@ class Kohana_Markdown
 			}
 			$result .= $this->suffix;
 			$result = $this->hash_part($result);
-		}
-		else {
-			# If there's no such link ID, leave intact:
+
+		/* If there's no such link ID, leave intact: */
+		} else {
 			$result = $whole_match;
 		}
 
 		return $result;
 	}
 
-	protected function _doImages_inline_callback($matches)
+	protected function _do_images_inline_callback($matches)
 	{
 		$whole_match	= $matches[1];
 		$alt_text		= $matches[2];
@@ -828,34 +841,42 @@ class Kohana_Markdown
 		$alt_text = $this->encodeAttribute($alt_text);
 		$url = $this->encodeAttribute($url);
 		$result = "<img src=\"$url\" alt=\"$alt_text\"";
+
+		/* $title already quoted */
 		if (isset($title)) {
 			$title = $this->encodeAttribute($title);
-			$result .=  " title=\"$title\""; # $title already quoted
+			$result .=  " title=\"$title\"";
 		}
 		$result .= $this->suffix;
 
 		return $this->hash_part($result);
 	}
 
-	protected function doHeaders($text)
+	/**
+	 * Turn Markdown headers into (x)html h[1-6] tags.
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	protected function do_headers($text)
 	{
-		# Setext-style headers:
-		#	  Header 1
-		#	  ========
-		#  
-		#	  Header 2
-		#	  --------
-		#
+		/* Setext-style headers:
+		 *		Header 1
+		 *		========
+		 *
+		 *		Header 2
+		 *		--------
+		 */
 		$text = preg_replace_callback('{ ^(.+?)[ ]*\n(=+|-+)[ ]*\n+ }mx',
-			array(&$this, '_doHeaders_callback_setext'), $text);
+			array(&$this, '_do_headers_callback_setext'), $text);
 
-		# atx-style headers:
-		#	# Header 1
-		#	## Header 2
-		#	## Header 2 with closing hashes ##
-		#	...
-		#	###### Header 6
-		#
+		/* atx-style headers:
+		 *		# Header 1
+		 *		## Header 2
+		 *	## Header 2 with closing hashes ##
+		 *	...
+		 *	###### Header 6
+		 */
 		$text = preg_replace_callback('{
 				^(\#{1,6})	# $1 = string of #\'s
 				[ ]*
@@ -864,37 +885,40 @@ class Kohana_Markdown
 				\#*			# optional closing #\'s (not counted)
 				\n+
 			}xm',
-			array(&$this, '_doHeaders_callback_atx'), $text);
+			array(&$this, '_do_headers_callback_atx'), $text);
 
 		return $text;
 	}
 
-	protected function _doHeaders_callback_setext($matches)
+	protected function _do_headers_callback_setext($matches)
 	{
-		# Terrible hack to check we haven't found an empty list item.
+		/* Terrible hack to check we haven't found an empty list item. */
 		if ($matches[2] == '-' && preg_match('{^-(?: |$)}', $matches[1]))
 			return $matches[0];
 		
 		$level = $matches[2]{0} == '=' ? 1 : 2;
-		$block = "<h$level>".$this->runSpanGamut($matches[1])."</h$level>";
+		$block = "<h$level>".$this->run_span_gamut($matches[1])."</h$level>";
 		return "\n" . $this->hash_block($block) . "\n\n";
 	}
 
-	protected function _doHeaders_callback_atx($matches)
+	protected function _do_headers_callback_atx($matches)
 	{
 		$level = strlen($matches[1]);
-		$block = "<h$level>".$this->runSpanGamut($matches[2])."</h$level>";
+		$block = "<h$level>".$this->run_span_gamut($matches[2])."</h$level>";
 		return "\n" . $this->hash_block($block) . "\n\n";
 	}
 
-	protected function doLists($text)
+	/**
+	 * Form HTML ordered (numbered) and unordered (bulleted) lists.
+	 *
+	 * @param   string   The markdown getting transformed.
+	 * @return  string   String that will replace the tag.
+	 */
+	protected function do_lists($text)
 	{
-	#
-	# Form HTML ordered (numbered) and unordered (bulleted) lists.
-	#
 		$less_than_tab = $this->tab_width - 1;
 
-		# Re-usable patterns to match list item bullets and number markers:
+		/* Re-usable patterns to match list item bullets and number markers: */
 		$marker_ul_re  = '[*+-]';
 		$marker_ol_re  = '\d+[.]';
 		$marker_any_re = "(?:$marker_ul_re|$marker_ol_re)";
@@ -905,7 +929,7 @@ class Kohana_Markdown
 			);
 
 		foreach ($markers_relist as $marker_re => $other_marker_re) {
-			# Re-usable pattern to match any entirel ul or ol list:
+			/* Re-usable pattern to match any entirel ul or ol list: */
 			$whole_list_re = '
 				(								# $1 = whole list
 				  (								# $2
@@ -931,33 +955,32 @@ class Kohana_Markdown
 					  )
 				  )
 				)
-			'; // mx
-			
-			# We use a different prefix before nested lists than top-level lists.
-			# See extended comment in _ProcessListItems().
-		
+			';
+
+			/* We use different prefix before nested lists than top-level lists.
+			 * See extended comment in _ProcessListItems().
+			 */
 			if ($this->list_level) {
 				$text = preg_replace_callback('{
 						^
 						'.$whole_list_re.'
 					}mx',
-					array(&$this, '_doLists_callback'), $text);
-			}
-			else {
+					array(&$this, '_do_lists_callback'), $text);
+			} else {
 				$text = preg_replace_callback('{
 						(?:(?<=\n)\n|\A\n?) # Must eat the newline
 						'.$whole_list_re.'
 					}mx',
-					array(&$this, '_doLists_callback'), $text);
+					array(&$this, '_do_lists_callback'), $text);
 			}
 		}
 
 		return $text;
 	}
 
-	protected function _doLists_callback($matches)
+	protected function _do_lists_callback($matches)
 	{
-		# Re-usable patterns to match list item bullets and number markers:
+		/* Re-usable patterns to match list item bullets and number markers: */
 		$marker_ul_re  = '[*+-]';
 		$marker_ol_re  = '\d+[.]';
 		$marker_any_re = "(?:$marker_ul_re|$marker_ol_re)";
@@ -973,8 +996,6 @@ class Kohana_Markdown
 		$result = $this->hash_block("<$list_type>\n" . $result . "</$list_type>");
 		return "\n". $result ."\n\n";
 	}
-
-	var $list_level = 0;
 
 	protected function processListItems($list_str, $marker_any_re)
 	{
@@ -1005,7 +1026,7 @@ class Kohana_Markdown
 		
 		$this->list_level++;
 
-		# trim trailing blank lines:
+		/* trim trailing blank lines: */
 		$list_str = preg_replace("/\n{2,}\\z/", "\n", $list_str);
 
 		$list_str = preg_replace_callback('{
@@ -1035,15 +1056,15 @@ class Kohana_Markdown
 		if ($leading_line || $tailing_blank_line || 
 			preg_match('/\n{2,}/', $item))
 		{
-			# Replace marker with the appropriate whitespace indentation
+			/* Replace marker with the appropriate whitespace indentation */
 			$item = $leading_space . str_repeat(' ', strlen($marker_space)) . $item;
 			$item = $this->run_block_gamut($this->outdent($item)."\n");
 		}
 		else {
-			# Recursion for sub-lists:
-			$item = $this->doLists($this->outdent($item));
+			/* Recursion for sub-lists: */
+			$item = $this->do_lists($this->outdent($item));
 			$item = preg_replace('/\n+$/', '', $item);
-			$item = $this->runSpanGamut($item);
+			$item = $this->run_span_gamut($item);
 		}
 
 		return "<li>" . $item . "</li>\n";
@@ -1156,7 +1177,7 @@ class Kohana_Markdown
 					# Three-char closing marker, close em and strong.
 					array_shift($token_stack);
 					$span = array_shift($text_stack);
-					$span = $this->runSpanGamut($span);
+					$span = $this->run_span_gamut($span);
 					$span = "<strong><em>$span</em></strong>";
 					$text_stack[0] .= $this->hash_part($span);
 					$em = '';
@@ -1167,7 +1188,7 @@ class Kohana_Markdown
 					$token_stack[0] = str_repeat($token{0}, 3-$token_len);
 					$tag = $token_len == 2 ? "strong" : "em";
 					$span = $text_stack[0];
-					$span = $this->runSpanGamut($span);
+					$span = $this->run_span_gamut($span);
 					$span = "<$tag>$span</$tag>";
 					$text_stack[0] = $this->hash_part($span);
 					$$tag = ''; # $$tag stands for $em or $strong
@@ -1181,7 +1202,7 @@ class Kohana_Markdown
 						$shifted_token = array_shift($token_stack);
 						$tag = strlen($shifted_token) == 2 ? "strong" : "em";
 						$span = array_shift($text_stack);
-						$span = $this->runSpanGamut($span);
+						$span = $this->run_span_gamut($span);
 						$span = "<$tag>$span</$tag>";
 						$text_stack[0] .= $this->hash_part($span);
 						$$tag = ''; # $$tag stands for $em or $strong
@@ -1205,7 +1226,7 @@ class Kohana_Markdown
 					# Closing strong marker:
 					array_shift($token_stack);
 					$span = array_shift($text_stack);
-					$span = $this->runSpanGamut($span);
+					$span = $this->run_span_gamut($span);
 					$span = "<strong>$span</strong>";
 					$text_stack[0] .= $this->hash_part($span);
 					$strong = '';
@@ -1221,7 +1242,7 @@ class Kohana_Markdown
 						# Closing emphasis marker:
 						array_shift($token_stack);
 						$span = array_shift($text_stack);
-						$span = $this->runSpanGamut($span);
+						$span = $this->run_span_gamut($span);
 						$span = "<em>$span</em>";
 						$text_stack[0] .= $this->hash_part($span);
 						$em = '';
@@ -1295,7 +1316,7 @@ class Kohana_Markdown
 		foreach ($grafs as $key => $value) {
 			if (!preg_match('/^B\x1A[0-9]+B$/', $value)) {
 				# Is a paragraph.
-				$value = $this->runSpanGamut($value);
+				$value = $this->run_span_gamut($value);
 				$value = preg_replace('/^([ ]*)/', "<p>", $value);
 				$value .= "</p>";
 				$grafs[$key] = $this->unhash($value);
