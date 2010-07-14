@@ -31,7 +31,7 @@ For more information about Markdown's syntax, see:
 	a github key configured. Please check the github documentation for more
 	details.
 
-		git clone git@github.com:stroppytux/kohana-markdown.git modules/markdown
+		git clone git://github.com/stroppytux/kohana-markdown.git modules/markdown
 
 
 	This should give you the following *(in the modules/markdown directory)*:
