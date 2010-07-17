@@ -1,11 +1,12 @@
 <?php defined('SYSPATH') or die('No direct script access.');
 return array
 (
-	'default'   => array
+	'default' => array
 	(
 		'type'				=> 'xhtml',		// html or xhtml
 		'tab_width'			=> 4,			// Tab width for output
-		// Many more options to come
+		'no_entities'		=> FALSE,
+		'no_markup'			=> FALSE
 	)
 );
 ?>

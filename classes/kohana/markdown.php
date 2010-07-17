@@ -83,8 +83,8 @@ class Kohana_Markdown
 		"do_headers"			=> 10,
 		"do_horizontal_rules"	=> 20,
 		"do_lists"				=> 40,
-		"doCodeBlocks"			=> 50,
-		"doBlockQuotes"			=> 60,
+		"do_code_blocks"		=> 50,
+		"do_block_quotes"		=> 60,
 		);
 
 	/* Transformations that occur *within* block-level tags */
@@ -103,9 +103,9 @@ class Kohana_Markdown
 		 * links like [this](<url>).
 		 */
 		"doAutoLinks"			=> 30,
-		"encodeAmpsAndAngles"	=> 40,
+		"encode_amps_and_angles"	=> 40,
 
-		"doItalicsAndBold"		=> 50,
+		"do_italics_and_bold"	=> 50,
 		"do_hard_breaks"		=> 60,
 		);
 
@@ -144,6 +144,8 @@ class Kohana_Markdown
 		$this->_config = $config;
 		$this->suffix = ($this->_config['tab_width'] == 'html') ? '>' : ' />';
 		$this->tab_width = $this->_config['tab_width'];
+		$this->no_entities = $this->_config['no_entities'];
+		$this->no_markup = $this->_config['no_markup'];
 
 		$this->init_detab();
 		$this->prepare_italics_and_bold();
@@ -560,7 +562,7 @@ class Kohana_Markdown
 		}
 		
 		# Finally form paragraph and restore hashed blocks.
-		$text = $this->formParagraphs($text);
+		$text = $this->form_paragraphs($text);
 
 		return $text;
 	}
@@ -706,12 +708,12 @@ class Kohana_Markdown
 
 		if (isset($this->urls[$link_id])) {
 			$url = $this->urls[$link_id];
-			$url = $this->encodeAttribute($url);
+			$url = $this->encode_attribute($url);
 
 			$result = "<a href=\"$url\"";
 			if ( isset( $this->titles[$link_id] ) ) {
 				$title = $this->titles[$link_id];
-				$title = $this->encodeAttribute($title);
+				$title = $this->encode_attribute($title);
 				$result .=  " title=\"$title\"";
 			}
 
@@ -731,11 +733,11 @@ class Kohana_Markdown
 		$url			=  $matches[3] == '' ? $matches[4] : $matches[3];
 		$title			=& $matches[7];
 
-		$url = $this->encodeAttribute($url);
+		$url = $this->encode_attribute($url);
 
 		$result = "<a href=\"$url\"";
 		if (isset($title)) {
-			$title = $this->encodeAttribute($title);
+			$title = $this->encode_attribute($title);
 			$result .=  " title=\"$title\"";
 		}
 
@@ -811,13 +813,13 @@ class Kohana_Markdown
 			$link_id = strtolower($alt_text);
 		}
 
-		$alt_text = $this->encodeAttribute($alt_text);
+		$alt_text = $this->encode_attribute($alt_text);
 		if (isset($this->urls[$link_id])) {
-			$url = $this->encodeAttribute($this->urls[$link_id]);
+			$url = $this->encode_attribute($this->urls[$link_id]);
 			$result = "<img src=\"$url\" alt=\"$alt_text\"";
 			if (isset($this->titles[$link_id])) {
 				$title = $this->titles[$link_id];
-				$title = $this->encodeAttribute($title);
+				$title = $this->encode_attribute($title);
 				$result .=  " title=\"$title\"";
 			}
 			$result .= $this->suffix;
@@ -838,13 +840,13 @@ class Kohana_Markdown
 		$url			= $matches[3] == '' ? $matches[4] : $matches[3];
 		$title			=& $matches[7];
 
-		$alt_text = $this->encodeAttribute($alt_text);
-		$url = $this->encodeAttribute($url);
+		$alt_text = $this->encode_attribute($alt_text);
+		$url = $this->encode_attribute($url);
 		$result = "<img src=\"$url\" alt=\"$alt_text\"";
 
 		/* $title already quoted */
 		if (isset($title)) {
-			$title = $this->encodeAttribute($title);
+			$title = $this->encode_attribute($title);
 			$result .=  " title=\"$title\"";
 		}
 		$result .= $this->suffix;
@@ -958,7 +960,7 @@ class Kohana_Markdown
 			';
 
 			/* We use different prefix before nested lists than top-level lists.
-			 * See extended comment in _ProcessListItems().
+			 * See extended comment in _process_list_items().
 			 */
 			if ($this->list_level) {
 				$text = preg_replace_callback('{
@@ -991,39 +993,40 @@ class Kohana_Markdown
 		$marker_any_re = ( $list_type == "ul" ? $marker_ul_re : $marker_ol_re );
 		
 		$list .= "\n";
-		$result = $this->processListItems($list, $marker_any_re);
+		$result = $this->process_list_items($list, $marker_any_re);
 		
 		$result = $this->hash_block("<$list_type>\n" . $result . "</$list_type>");
 		return "\n". $result ."\n\n";
 	}
 
-	protected function processListItems($list_str, $marker_any_re)
+	/**
+	 * Process the contents of a single ordered or unordered list, splitting it
+	 * into individual list items.
+	 */
+	protected function process_list_items($list_str, $marker_any_re)
 	{
-	#
-	#	Process the contents of a single ordered or unordered list, splitting it
-	#	into individual list items.
-	#
-		# The $this->list_level global keeps track of when we're inside a list.
-		# Each time we enter a list, we increment it; when we leave a list,
-		# we decrement. If it's zero, we're not in a list anymore.
-		#
-		# We do this because when we're not inside a list, we want to treat
-		# something like this:
-		#
-		#		I recommend upgrading to version
-		#		8. Oops, now this line is treated
-		#		as a sub-list.
-		#
-		# As a single paragraph, despite the fact that the second line starts
-		# with a digit-period-space sequence.
-		#
-		# Whereas when we're inside a list (or sub-list), that line will be
-		# treated as the start of a sub-list. What a kludge, huh? This is
-		# an aspect of Markdown's syntax that's hard to parse perfectly
-		# without resorting to mind-reading. Perhaps the solution is to
-		# change the syntax rules such that sub-lists must start with a
-		# starting cardinal number; e.g. "1." or "a.".
-		
+		/*
+		 * The $this->list_level global keeps track of when we're inside a list.
+		 * Each time we enter a list, we increment it; when we leave a list,
+		 * we decrement. If it's zero, we're not in a list anymore.
+		 *
+		 * We do this because when we're not inside a list, we want to treat
+		 * something like this:
+		 *
+		 *		I recommend upgrading to version
+		 *		8. Oops, now this line is treated
+		 *		as a sub-list.
+		 *
+		 * As a single paragraph, despite the fact that the second line starts
+		 * with a digit-period-space sequence.
+		 *
+		 * Whereas when we're inside a list (or sub-list), that line will be
+		 * treated as the start of a sub-list. What a kludge, huh? This is
+		 * an aspect of Markdown's syntax that's hard to parse perfectly
+		 * without resorting to mind-reading. Perhaps the solution is to
+		 * change the syntax rules such that sub-lists must start with a
+		 * starting cardinal number; e.g. "1." or "a.".
+		 */
 		$this->list_level++;
 
 		/* trim trailing blank lines: */
@@ -1039,13 +1042,13 @@ class Kohana_Markdown
 			(?:(\n+(?=\n))|\n)				# tailing blank line = $5
 			(?= \n* (\z | \2 ('.$marker_any_re.') (?:[ ]+|(?=\n))))
 			}xm',
-			array(&$this, '_processListItems_callback'), $list_str);
+			array(&$this, '_process_list_items_callback'), $list_str);
 
 		$this->list_level--;
 		return $list_str;
 	}
 
-	protected function _processListItems_callback($matches)
+	protected function _process_list_items_callback($matches)
 	{
 		$item = $matches[4];
 		$leading_line =& $matches[1];
@@ -1053,15 +1056,15 @@ class Kohana_Markdown
 		$marker_space = $matches[3];
 		$tailing_blank_line =& $matches[5];
 
+		/* Replace marker with the appropriate whitespace indentation */
 		if ($leading_line || $tailing_blank_line || 
 			preg_match('/\n{2,}/', $item))
 		{
-			/* Replace marker with the appropriate whitespace indentation */
 			$item = $leading_space . str_repeat(' ', strlen($marker_space)) . $item;
 			$item = $this->run_block_gamut($this->outdent($item)."\n");
-		}
-		else {
-			/* Recursion for sub-lists: */
+
+		/* Recursion for sub-lists: */
+		} else {
 			$item = $this->do_lists($this->outdent($item));
 			$item = preg_replace('/\n+$/', '', $item);
 			$item = $this->run_span_gamut($item);
@@ -1070,11 +1073,11 @@ class Kohana_Markdown
 		return "<li>" . $item . "</li>\n";
 	}
 
-	protected function doCodeBlocks($text)
+	/**
+	 * Process Markdown `<pre><code>` blocks.
+	 */
+	protected function do_code_blocks($text)
 	{
-	#
-	#	Process Markdown `<pre><code>` blocks.
-	#
 		$text = preg_replace_callback('{
 				(?:\n\n|\A\n?)
 				(	            # $1 = the code block -- one or more lines, starting with a space/tab
@@ -1085,96 +1088,92 @@ class Kohana_Markdown
 				)
 				((?=^[ ]{0,'.$this->tab_width.'}\S)|\Z)	# Lookahead for non-space at line-start, or end of doc
 			}xm',
-			array(&$this, '_doCodeBlocks_callback'), $text);
+			array(&$this, '_do_code_blocks_callback'), $text);
 
 		return $text;
 	}
 
-	protected function _doCodeBlocks_callback($matches)
+	protected function _do_code_blocks_callback($matches)
 	{
 		$codeblock = $matches[1];
 
 		$codeblock = $this->outdent($codeblock);
 		$codeblock = htmlspecialchars($codeblock, ENT_NOQUOTES);
 
-		# trim leading newlines and trailing newlines
+		/* trim leading newlines and trailing newlines */
 		$codeblock = preg_replace('/\A\n+|\n+\z/', '', $codeblock);
 
 		$codeblock = "<pre><code>$codeblock\n</code></pre>";
 		return "\n\n".$this->hash_block($codeblock)."\n\n";
 	}
 
-	protected function makeCodeSpan($code)
+	/**
+	 * Create a code span markup for $code. Called from handleSpanToken.
+	 */
+	protected function make_code_span($code)
 	{
-	#
-	# Create a code span markup for $code. Called from handleSpanToken.
-	#
 		$code = htmlspecialchars(trim($code), ENT_NOQUOTES);
 		return $this->hash_part("<code>$code</code>");
 	}
 
+	/**
+	 * Prepare regular expressions for searching emphasis tokens in any
+	 * context.
+	 */
 	protected function prepare_italics_and_bold()
 	{
-	#
-	# Prepare regular expressions for searching emphasis tokens in any
-	# context.
-	#
 		foreach ($this->em_relist as $em => $em_re) {
 			foreach ($this->strong_relist as $strong => $strong_re) {
-				# Construct list of allowed token expressions.
+				/* Construct list of allowed token expressions. */
 				$token_relist = array();
 				if (isset($this->em_strong_relist["$em$strong"])) {
 					$token_relist[] = $this->em_strong_relist["$em$strong"];
 				}
 				$token_relist[] = $em_re;
 				$token_relist[] = $strong_re;
-				
-				# Construct master expression from list.
+
+				/* Construct master expression from list. */
 				$token_re = '{('. implode('|', $token_relist) .')}';
 				$this->em_strong_prepared_relist["$em$strong"] = $token_re;
 			}
 		}
 	}
 
-	protected function doItalicsAndBold($text)
+	protected function do_italics_and_bold($text)
 	{
 		$token_stack = array('');
 		$text_stack = array('');
 		$em = '';
 		$strong = '';
 		$tree_char_em = false;
-		
+
 		while (1) {
-			#
-			# Get prepared regular expression for seraching emphasis tokens
-			# in current context.
-			#
+			/* Get prepared regular expression for seraching emphasis tokens in
+				current context. */
 			$token_re = $this->em_strong_prepared_relist["$em$strong"];
-			
-			#
-			# Each loop iteration search for the next emphasis token. 
-			# Each token is then passed to handleSpanToken.
-			#
+
+			/* Each loop iteration search for next emphasis token. Each token
+				then passed to handleSpanToken. */
 			$parts = preg_split($token_re, $text, 2, PREG_SPLIT_DELIM_CAPTURE);
 			$text_stack[0] .= $parts[0];
 			$token =& $parts[1];
 			$text =& $parts[2];
-			
+
 			if (empty($token)) {
-				# Reached end of text span: empty stack without emitting.
-				# any more emphasis.
+				/* Reached end of text span: empty stack without emitting. any
+					more emphasis. */
 				while ($token_stack[0]) {
 					$text_stack[1] .= array_shift($token_stack);
 					$text_stack[0] .= array_shift($text_stack);
 				}
 				break;
 			}
-			
+
 			$token_len = strlen($token);
 			if ($tree_char_em) {
-				# Reached closing marker while inside a three-char emphasis.
+				/* Reached closing marker while inside a three-char emphasis. */
 				if ($token_len == 3) {
-					# Three-char closing marker, close em and strong.
+					/* Three-char closing marker, close em and strong. */
 					array_shift($token_stack);
 					$span = array_shift($text_stack);
 					$span = $this->run_span_gamut($span);
@@ -1183,8 +1182,8 @@ class Kohana_Markdown
 					$em = '';
 					$strong = '';
 				} else {
-					# Other closing marker: close one em or strong and
-					# change current token state to match the other
+					/* Other closing marker: close one em or strong and change
+						current token state to match the other */
 					$token_stack[0] = str_repeat($token{0}, 3-$token_len);
 					$tag = $token_len == 2 ? "strong" : "em";
 					$span = $text_stack[0];
@@ -1196,8 +1195,8 @@ class Kohana_Markdown
 				$tree_char_em = false;
 			} else if ($token_len == 3) {
 				if ($em) {
-					# Reached closing marker for both em and strong.
-					# Closing strong marker:
+					/* Reached closing marker for both em and strong.
+						Closing strong marker: */
 					for ($i = 0; $i < 2; ++$i) {
 						$shifted_token = array_shift($token_stack);
 						$tag = strlen($shifted_token) == 2 ? "strong" : "em";
@@ -1208,8 +1207,8 @@ class Kohana_Markdown
 						$$tag = ''; # $$tag stands for $em or $strong
 					}
 				} else {
-					# Reached opening three-char emphasis marker. Push on token 
-					# stack; will be handled by the special condition above.
+					/* Reached opening three-char emphasis marker. Push on token 
+						stack; will be handled by the special condition above. */
 					$em = $token{0};
 					$strong = "$em$em";
 					array_unshift($token_stack, $token);
@@ -1218,12 +1217,12 @@ class Kohana_Markdown
 				}
 			} else if ($token_len == 2) {
 				if ($strong) {
-					# Unwind any dangling emphasis marker:
+					/* Unwind any dangling emphasis marker: */
 					if (strlen($token_stack[0]) == 1) {
 						$text_stack[1] .= array_shift($token_stack);
 						$text_stack[0] .= array_shift($text_stack);
 					}
-					# Closing strong marker:
+					/* Closing strong marker: */
 					array_shift($token_stack);
 					$span = array_shift($text_stack);
 					$span = $this->run_span_gamut($span);
@@ -1236,10 +1235,10 @@ class Kohana_Markdown
 					$strong = $token;
 				}
 			} else {
-				# Here $token_len == 1
+				/* Here $token_len == 1 */
 				if ($em) {
 					if (strlen($token_stack[0]) == 1) {
-						# Closing emphasis marker:
+						/* Closing emphasis marker: */
 						array_shift($token_stack);
 						$span = array_shift($text_stack);
 						$span = $this->run_span_gamut($span);
@@ -1259,7 +1258,7 @@ class Kohana_Markdown
 		return $text_stack[0];
 	}
 
-	protected function doBlockQuotes($text)
+	protected function do_block_quotes($text)
 	{
 		$text = preg_replace_callback('/
 			  (								# Wrap whole match in $1
@@ -1271,59 +1270,55 @@ class Kohana_Markdown
 				)+
 			  )
 			/xm',
-			array(&$this, '_doBlockQuotes_callback'), $text);
+			array(&$this, '_do_block_quotes_callback'), $text);
 
 		return $text;
 	}
 
-	protected function _doBlockQuotes_callback($matches)
+	protected function _do_block_quotes_callback($matches)
 	{
 		$bq = $matches[1];
-		# trim one level of quoting - trim whitespace-only lines
+		/* trim one level of quoting - trim whitespace-only lines */
 		$bq = preg_replace('/^[ ]*>[ ]?|^[ ]+$/m', '', $bq);
 		$bq = $this->run_block_gamut($bq);		# recurse
 
 		$bq = preg_replace('/^/m', "  ", $bq);
-		# These leading spaces cause problem with <pre> content, 
-		# so we need to fix that:
+		/* Leading spaces cause problem with <pre> content, so fix that: */
 		$bq = preg_replace_callback('{(\s*<pre>.+?</pre>)}sx', 
-			array(&$this, '_doBlockQuotes_callback2'), $bq);
+			array(&$this, '_do_block_quotes_callback2'), $bq);
 
 		return "\n". $this->hash_block("<blockquote>\n$bq\n</blockquote>")."\n\n";
 	}
 
-	protected function _doBlockQuotes_callback2($matches)
+	protected function _do_block_quotes_callback2($matches)
 	{
 		$pre = $matches[1];
 		$pre = preg_replace('/^  /m', '', $pre);
 		return $pre;
 	}
 
-	protected function formParagraphs($text)
+	/**
+	 *	Params:
+	 *		$text - string to process with html <p> tags
+	 */
+	protected function form_paragraphs($text)
 	{
-	#
-	#	Params:
-	#		$text - string to process with html <p> tags
-	#
-		# Strip leading and trailing lines:
+		/* Strip leading and trailing lines: */
 		$text = preg_replace('/\A\n+|\n+\z/', '', $text);
 
 		$grafs = preg_split('/\n{2,}/', $text, -1, PREG_SPLIT_NO_EMPTY);
 
-		#
-		# Wrap <p> tags and unhashify HTML blocks
-		#
+		/* Wrap <p> tags and unhashify HTML blocks */
 		foreach ($grafs as $key => $value) {
 			if (!preg_match('/^B\x1A[0-9]+B$/', $value)) {
-				# Is a paragraph.
+				/* Is a paragraph. */
 				$value = $this->run_span_gamut($value);
 				$value = preg_replace('/^([ ]*)/', "<p>", $value);
 				$value .= "</p>";
 				$grafs[$key] = $this->unhash($value);
 			}
 			else {
-				# Is a block.
-				# Modify elements of @grafs in-place...
+				/* Is a block. Modify elements of @grafs in-place... */
 				$graf = $value;
 				$block = $this->html_hashes[$graf];
 				$graf = $block;
@@ -1334,33 +1329,33 @@ class Kohana_Markdown
 		return implode("\n\n", $grafs);
 	}
 
-	protected function encodeAttribute($text)
+	/**
+	 * Encode text for a double-quoted HTML attribute. This function
+	 * is *not* suitable for attributes enclosed in single quotes.
+	 */
+	protected function encode_attribute($text)
 	{
-	#
-	# Encode text for a double-quoted HTML attribute. This function
-	# is *not* suitable for attributes enclosed in single quotes.
-	#
-		$text = $this->encodeAmpsAndAngles($text);
+		$text = $this->encode_amps_and_angles($text);
 		$text = str_replace('"', '&quot;', $text);
 		return $text;
 	}
 
-	protected function encodeAmpsAndAngles($text)
+	/**
+	 * Smart processing for ampersands and angle brackets that need to 
+	 * be encoded. Valid character entities are left alone unless the
+	 * no-entities mode is set.
+	 */
+	protected function encode_amps_and_angles($text)
 	{
-	#
-	# Smart processing for ampersands and angle brackets that need to 
-	# be encoded. Valid character entities are left alone unless the
-	# no-entities mode is set.
-	#
 		if ($this->no_entities) {
 			$text = str_replace('&', '&amp;', $text);
 		} else {
-			# Ampersand-encoding based entirely on Nat Irons's Amputator
-			# MT plugin: <http://bumppo.net/projects/amputator/>
+			/* Ampersand-encoding based entirely on Nat Irons's Amputator
+				MT plugin: <http://bumppo.net/projects/amputator/> */
 			$text = preg_replace('/&(?!#?[xX]?(?:[0-9a-fA-F]+|\w+);)/', 
 								'&amp;', $text);;
 		}
-		# Encode remaining <'s
+		/* Encode remaining <'s */
 		$text = str_replace('<', '&lt;', $text);
 
 		return $text;
@@ -1371,7 +1366,7 @@ class Kohana_Markdown
 		$text = preg_replace_callback('{<((https?|ftp|dict):[^\'">\s]+)>}i', 
 			array(&$this, '_doAutoLinks_url_callback'), $text);
 
-		# Email addresses: <address@domain.foo>
+		/* Email addresses: <address@domain.foo> */
 		$text = preg_replace_callback('{
 			<
 			(?:mailto:)?
@@ -1397,7 +1392,7 @@ class Kohana_Markdown
 
 	protected function _doAutoLinks_url_callback($matches)
 	{
-		$url = $this->encodeAttribute($matches[1]);
+		$url = $this->encode_attribute($matches[1]);
 		$link = "<a href=\"$url\">$url</a>";
 		return $this->hash_part($link);
 	}
@@ -1409,34 +1404,33 @@ class Kohana_Markdown
 		return $this->hash_part($link);
 	}
 
+	/**
+	 * Input: an email address, e.g. "foo@example.com"
+	 *
+	 * Output: the email address as a mailto link, with each character
+	 * 	of the address encoded as either a decimal or hex entity, in
+	 * 	the hopes of foiling most address harvesting spam bots. E.g.:
+	 *
+	 *   <p><a href="&#109;&#x61;&#105;&#x6c;&#116;&#x6f;&#58;&#x66;o&#111;
+	 *         &#x40;&#101;&#x78;&#97;&#x6d;&#112;&#x6c;&#101;&#46;&#x63;&#111;
+	 *         &#x6d;">&#x66;o&#111;&#x40;&#101;&#x78;&#97;&#x6d;&#112;&#x6c;
+	 *         &#101;&#46;&#x63;&#111;&#x6d;</a></p>
+	 *
+	 * Based by a filter by Matthew Wickline, posted to BBEdit-Talk.
+	 *    With some optimizations by Milian Wolff.
+	 */
 	protected function encodeEmailAddress($addr)
 	{
-	#
-	#	Input: an email address, e.g. "foo@example.com"
-	#
-	#	Output: the email address as a mailto link, with each character
-	#		of the address encoded as either a decimal or hex entity, in
-	#		the hopes of foiling most address harvesting spam bots. E.g.:
-	#
-	#	  <p><a href="&#109;&#x61;&#105;&#x6c;&#116;&#x6f;&#58;&#x66;o&#111;
-	#        &#x40;&#101;&#x78;&#97;&#x6d;&#112;&#x6c;&#101;&#46;&#x63;&#111;
-	#        &#x6d;">&#x66;o&#111;&#x40;&#101;&#x78;&#97;&#x6d;&#112;&#x6c;
-	#        &#101;&#46;&#x63;&#111;&#x6d;</a></p>
-	#
-	#	Based by a filter by Matthew Wickline, posted to BBEdit-Talk.
-	#   With some optimizations by Milian Wolff.
-	#
 		$addr = "mailto:" . $addr;
 		$chars = preg_split('/(?<!^)(?!$)/', $addr);
 		$seed = (int)abs(crc32($addr) / strlen($addr)); # Deterministic seed.
 		
 		foreach ($chars as $key => $char) {
 			$ord = ord($char);
-			# Ignore non-ascii chars.
+			/* Ignore non-ascii chars. */
 			if ($ord < 128) {
 				$r = ($seed * (1 + $key)) % 100; # Pseudo-random function.
-				# roughly 10% raw, 45% hex, 45% dec
-				# '@' *must* be encoded. I insist.
+				/* roughly 10% raw, 45% hex, 45% dec '@' *must* be encoded. I insist. */
 				if ($r > 90 && $char != '@') /* do nothing */;
 				else if ($r < 45) $chars[$key] = '&#x'.dechex($ord).';';
 				else              $chars[$key] = '&#'.$ord.';';
@@ -1450,12 +1444,12 @@ class Kohana_Markdown
 		return $addr;
 	}
 
+	/**
+	 * Take the string $str and parse it into tokens, hashing embeded HTML,
+	 * escaped characters and handling code spans.
+	 */
 	protected function parseSpan($str)
 	{
-	#
-	# Take the string $str and parse it into tokens, hashing embeded HTML,
-	# escaped characters and handling code spans.
-	#
 		$output = '';
 		
 		$span_re = '{
@@ -1506,12 +1500,12 @@ class Kohana_Markdown
 		return $output;
 	}
 
+	/**
+	 * Handle $token provided by parseSpan by determining its nature and 
+	 * returning the corresponding value that should replace it.
+	 */
 	protected function handleSpanToken($token, &$str)
 	{
-	#
-	# Handle $token provided by parseSpan by determining its nature and 
-	# returning the corresponding value that should replace it.
-	#
 		switch ($token{0}) {
 			case "\\":
 				return $this->hash_part("&#". ord($token{1}). ";");
@@ -1521,7 +1515,7 @@ class Kohana_Markdown
 					$str, $matches))
 				{
 					$str = $matches[2];
-					$codespan = $this->makeCodeSpan($matches[1]);
+					$codespan = $this->make_code_span($matches[1]);
 					return $this->hash_part($codespan);
 				}
 				return $token; // return as text since no ending marker found.
@@ -1530,19 +1524,19 @@ class Kohana_Markdown
 		}
 	}
 
+	/**
+	 * Remove one level of line-leading tabs or spaces
+	 */
 	protected function outdent($text)
 	{
-	#
-	# Remove one level of line-leading tabs or spaces
-	#
 		return preg_replace('/^(\t|[ ]{1,'.$this->tab_width.'})/m', '', $text);
 	}
 
+	/**
+	 * Replace tabs with the appropriate amount of space.
+	 */
 	protected function detab($text)
 	{
-	#
-	# Replace tabs with the appropriate amount of space.
-	#
 		# For each line we separate the line in blocks delemited by
 		# tab characters. Then we reconstruct every line by adding the 
 		# appropriate number of space between each blocks.
@@ -1572,25 +1566,25 @@ class Kohana_Markdown
 		return $line;
 	}
 
+	/**
+	 * Check for the availability of the function in the `utf8_strlen` property
+	 * (initially `mb_strlen`). If the function is not available, create a 
+	 * function that will loosely count the number of UTF-8 characters with a
+	 * regular expression.
+	 */
 	protected function init_detab()
 	{
-	#
-	# Check for the availability of the function in the `utf8_strlen` property
-	# (initially `mb_strlen`). If the function is not available, create a 
-	# function that will loosely count the number of UTF-8 characters with a
-	# regular expression.
-	#
 		if (function_exists($this->utf8_strlen)) return;
 		$this->utf8_strlen = create_function('$text', 'return preg_match_all(
 			"/[\\\\x00-\\\\xBF]|[\\\\xC0-\\\\xFF][\\\\x80-\\\\xBF]*/", 
 			$text, $m);');
 	}
 
+	/**
+	 * Swap back in all the tags hashed by _Hash_HTML_blocks.
+	 */
 	protected function unhash($text)
 	{
-	#
-	# Swap back in all the tags hashed by _Hash_HTML_blocks.
-	#
 		return preg_replace_callback('/(.)\x1A[0-9]+\1/', 
 			array(&$this, '_unhash_callback'), $text);
 	}
