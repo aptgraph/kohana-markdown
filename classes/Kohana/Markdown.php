@@ -180,7 +180,7 @@ class Kohana_Markdown
 	 *     $foo_parser = Markdown::$instances['default'];
 	 *
 	 * @param   string   the name of the markdown parser to use [Optional]
-	 * @return  Kohana_Markdown
+	 * @return  Markdown
 	 * @throws  Kohana_Markdown_Exception
 	 */
 	public static function instance($parser = NULL)
@@ -202,7 +202,7 @@ class Kohana_Markdown
 		$config = $config->get($parser);
 
 		/* Create a new markdown instance */
-		Markdown::$instances[$parser] = new Kohana_Markdown($config);
+		Markdown::$instances[$parser] = new Markdown($config);
 
 		/* Return the instance */
 		return Markdown::$instances[$parser];

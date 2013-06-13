@@ -11,5 +11,5 @@
 * @since Available since Release 1.0
 * *
 */
-abstract class Markdown extends Kohana_Markdown {}
+class Markdown extends Kohana_Markdown {}
 ?>
