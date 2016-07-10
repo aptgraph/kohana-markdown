@@ -195,7 +195,7 @@ class Kohana_Markdown
 			return Markdown::$instances[$parser];
 		}
 
-		$config = Kohana::config('markdown');
+		$config = Kohana::$config->load('markdown');
 		if (!$config->offsetExists($parser)) {
 			throw new Kohana_Markdown_Exception('Failed to load Kohana Markdown parser: :parser', array(':parser' => $parser));
 		}
